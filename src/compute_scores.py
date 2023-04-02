@@ -4,6 +4,7 @@ import sys
 from tqdm import tqdm
 from global_config import QUERY_STRUCTS
 import numpy as np
+import argparse
 
 def clean_string(string):
     clean_str = re.sub(r"[^0-9,]","",string)
@@ -17,12 +18,17 @@ def compute_mrr_score(ground_truth, predictions):
         if prediction in ground_truth:
             reciprocal_rank = 1 / (i + 1)
             reciprocal_ranks.append(reciprocal_rank)
-    mrr = np.mean(reciprocal_ranks)
+    if len(reciprocal_ranks) == 0: return 0
+    mrr = sum(reciprocal_ranks)/len(reciprocal_ranks)
     return mrr
 
 
 def compute_ndcg_score(ground_truth, predictions, k=5):
     relevance_scores = []
+    length = min(len(ground_truth),len(predictions))
+    k = min(length,k)
+    ground_truth = ground_truth[:k]
+    predictions = predictions[:k]
     for i in range(k):
         prediction = predictions[i]
         relevance_score = 1 if prediction in ground_truth else 0
@@ -40,13 +46,15 @@ def compute_hits_score(gt, pred, k=1):
     return hits/l
 
 def main(ground_truth_path, prediction_path, log_score_path):
+    log_score_filename = os.path.join(f"{log_score_path}","score.txt")
+    if os.path.exists(log_score_filename):
+        os.remove(log_score_filename)
     for qtype, _ in QUERY_STRUCTS.items():
         idx = 0 
         gt_filename = os.path.join(f"{ground_truth_path}",f"{qtype}_{idx}_answer.txt")
         pred_filename = os.path.join(f"{prediction_path}",f"{qtype}_{idx}_predicted_answer.txt")
         if not os.path.exists(f"{log_score_path}"):
             os.makedirs(f"{log_score_path}")
-        log_score_filename = os.path.join(f"{log_score_path}","score.txt")
         scores = {"hits@1":0,"hits@3":0,"hits@10":0,
                   "ndcg@1":0,"ndcg@3":0,"ndcg@10":0,
                   "mrr":0}
@@ -71,7 +79,7 @@ def main(ground_truth_path, prediction_path, log_score_path):
             pred_filename = os.path.join(f"{prediction_path}",f"{qtype}_{idx}_predicted_answer.txt")
             pbar.update(1)
         pbar.close()
-        with open(log_score_filename, "w") as score_file:
+        with open(log_score_filename, "a") as score_file:
             print(qtype, file=score_file)
             print("HITS@1:",scores["hits@1"]/(idx-1), file=score_file)
             print("HITS@3:",scores["hits@3"]/(idx-1), file=score_file)
