@@ -1,6 +1,6 @@
 import torch
 from transformers import T5Tokenizer, T5ForConditionalGeneration
-from transformers import LlamaTokenizer, LlamaForCausalLM
+from transformers import GenerationConfig, LlamaTokenizer, LlamaForCausalLM
 import deepspeed
 from fairscale.nn.model_parallel.initialize import initialize_model_parallel
 from llama import ModelArgs, Transformer, Tokenizer, LLaMA
@@ -129,17 +129,12 @@ class FairLlamaLLMAnswer(BaseLLMAnswer):
         return outputs
     
 class AlpacaLlamaLLMAnswer(BaseLLMAnswer):
-     def __init__(self, base_model="decapoda-research/llama-7b-hf", 
+    def __init__(self, base_model="decapoda-research/llama-7b-hf", 
                   lora_weights="tloen/alpaca-lora-7b"):
         super().__init__()
         self.tokenizer = LlamaTokenizer.from_pretrained(base_model)
         self.tokenizer.pad_token='[PAD]'
-        model = LlamaForCausalLM.from_pretrained(
-            base_model,
-            load_in_8bit=load_8bit,
-            torch_dtype=torch.float16,
-            device_map="auto",
-        )
+        model = LlamaForCausalLM.from_pretrained(base_model)
         model = PeftModel.from_pretrained(
             model,
             lora_weights,
@@ -149,5 +144,20 @@ class AlpacaLlamaLLMAnswer(BaseLLMAnswer):
                                  dtype=torch.int8,
                                  checkpoint=None,
                                  replace_with_kernel_inject=True)  
+        self.generation_config = GenerationConfig(
+            temperature =0.2,
+            top_p = 0.95,
+            top_k = 40,
+            num_beams = 1
+        )
+    
+    def generate_answer(self, premise_question):
+        if len(premise_question)<1: return []
+        input_ids = self.process_input(premise_question)
+        outputs = self.model.generate(input_ids=input_ids,
+                                    generation_config=self.generation_config, 
+                                    max_new_tokens=self.max_new_tokens)
+        return self.tokenizer.batch_decode(outputs, skip_special_tokens=True,
+                                    clean_up_tokenization_spaces=True)
         
         

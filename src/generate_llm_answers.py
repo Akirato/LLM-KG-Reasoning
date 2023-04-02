@@ -22,8 +22,8 @@ def main(processed_path, batch_size=10,
     elif "fair-llama" in modelname.lower():
         engine = FairLlamaLLMAnswer(ckpt_dir,tokenizer_path,batch_size)
         logging.info(f"FAIR LLaMA LLM: {modelname}")
-    elif ("llama" in modelname.lower()) and (len(lora_weights)!=0):
-        engine = AlpacaLlamaLLMAnswer(modelname, lora_weights)
+    elif "alpaca" in modelname.lower():
+        engine = AlpacaLlamaLLMAnswer(modelname.split(":")[1], lora_weights)
     elif "llama" in modelname.lower():
         engine = LlamaLLMAnswer(modelname)
         logging.info(f"LLaMA LLM: {modelname}")
@@ -61,7 +61,8 @@ if __name__ == "__main__":
 
     main(args.processed_path, args.batch_size, 
          modelname=args.model_name, ckpt_dir=args.ckpt_dir,
-         tokenizer_path=args.tokenizer_path)
+         tokenizer_path=args.tokenizer_path,
+         lora_weights=args.lora_weights)
     # deepspeed --include localhost:1,2,3 generate_llm_answers.py \
     #          --processed_path ../processed_data/FB15k-237 --batch_size 10 \
     #          --model_name google/flan-t5-xxl \
