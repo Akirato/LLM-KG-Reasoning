@@ -4,6 +4,7 @@ from transformers import LlamaTokenizer, LlamaForCausalLM
 import deepspeed
 from fairscale.nn.model_parallel.initialize import initialize_model_parallel
 from llama import ModelArgs, Transformer, Tokenizer, LLaMA
+from peft import PeftModel
 import os
 import sys
 import time
@@ -126,3 +127,27 @@ class FairLlamaLLMAnswer(BaseLLMAnswer):
         outputs = self.model.generate(premise_question, max_gen_len=self.max_new_tokens,
                                       temperature=self.temperature, top_p=self.top_p)
         return outputs
+    
+class AlpacaLlamaLLMAnswer(BaseLLMAnswer):
+     def __init__(self, base_model="decapoda-research/llama-7b-hf", 
+                  lora_weights="tloen/alpaca-lora-7b"):
+        super().__init__()
+        self.tokenizer = LlamaTokenizer.from_pretrained(base_model)
+        self.tokenizer.pad_token='[PAD]'
+        model = LlamaForCausalLM.from_pretrained(
+            base_model,
+            load_in_8bit=load_8bit,
+            torch_dtype=torch.float16,
+            device_map="auto",
+        )
+        model = PeftModel.from_pretrained(
+            model,
+            lora_weights,
+            torch_dtype=torch.float16,
+        )
+        self.model = deepspeed.init_inference(model,
+                                 dtype=torch.int8,
+                                 checkpoint=None,
+                                 replace_with_kernel_inject=True)  
+        
+        

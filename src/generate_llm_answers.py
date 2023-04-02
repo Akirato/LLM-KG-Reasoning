@@ -1,7 +1,7 @@
 import os
 import sys
 from tqdm import trange
-from llm_engine import FlanLLMAnswer, LlamaLLMAnswer, FairLlamaLLMAnswer
+from llm_engine import FlanLLMAnswer, LlamaLLMAnswer, FairLlamaLLMAnswer, AlpacaLlamaLLMAnswer
 from gpt_engine import GPTAnswer
 from global_config import QUERY_STRUCTS
 import logging
@@ -11,7 +11,8 @@ import deepspeed
 logging.basicConfig(level=logging.INFO)
 def main(processed_path, batch_size=10, 
          modelname="google/flan-t5-xxl", 
-         ckpt_dir="", tokenizer_path=""):
+         ckpt_dir="", tokenizer_path="",
+         lora_weights=""):
     if "flan" in modelname.lower():
         engine = FlanLLMAnswer(modelname)
         logging.info(f"Flan LLM: {modelname}")
@@ -21,6 +22,8 @@ def main(processed_path, batch_size=10,
     elif "fair-llama" in modelname.lower():
         engine = FairLlamaLLMAnswer(ckpt_dir,tokenizer_path,batch_size)
         logging.info(f"FAIR LLaMA LLM: {modelname}")
+    elif ("llama" in modelname.lower()) and (len(lora_weights)!=0):
+        engine = AlpacaLlamaLLMAnswer(modelname, lora_weights)
     elif "llama" in modelname.lower():
         engine = LlamaLLMAnswer(modelname)
         logging.info(f"LLaMA LLM: {modelname}")
@@ -51,9 +54,9 @@ if __name__ == "__main__":
     parser.add_argument('--model_name', type=str, required=True, help="Model Id from Huggingface")
     parser.add_argument('--ckpt_dir', type=str, default="", help="Checkpoint dir for FAIR LLM")
     parser.add_argument('--tokenizer_path', type=str, default="", help="Tokenizer dir for FAIR LLM")
-    if "DEEPSPEED_PIPELINE_ENGINE" in os.environ and os.environ["DEEPSPEED_PIPELINE_ENGINE"] == "deepspeed":
-        parser.add_argument('--local_rank', type=int, default=-1, help='local rank passed from distributed launcher')
-        parser = deepspeed.add_config_arguments(parser)
+    parser.add_argument('--lora_weights',type=str, default="", help="Path to lora weights for Alpaca LLM")
+    parser.add_argument('--local_rank', type=int, default=-1, help='local rank passed from distributed launcher')
+    parser = deepspeed.add_config_arguments(parser)
     args = parser.parse_args()
 
     main(args.processed_path, args.batch_size, 
