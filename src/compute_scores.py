@@ -13,6 +13,8 @@ def clean_string(string):
 import numpy as np
 
 def compute_mrr_score(ground_truth, predictions):
+    if len(ground_truth) == len(predictions) == 0:
+        return 1
     reciprocal_ranks = []
     for i, prediction in enumerate(predictions):
         if prediction in ground_truth:
@@ -24,6 +26,8 @@ def compute_mrr_score(ground_truth, predictions):
 
 
 def compute_ndcg_score(ground_truth, predictions, k=5):
+    if len(ground_truth) == len(predictions) == 0:
+        return 1
     relevance_scores = []
     length = min(len(ground_truth),len(predictions))
     k = min(length,k)
@@ -39,9 +43,11 @@ def compute_ndcg_score(ground_truth, predictions, k=5):
     ndcg_k = dcg_k / idcg_k if idcg_k > 0 else 0
     return ndcg_k
 
-def compute_hits_score(gt, pred, k=1):
-    hits = len(set(pred[:k]).intersection(set(gt)))
-    l = len(pred[:k])
+def compute_hits_score(ground_truth, predictions, k=1):
+    if len(ground_truth) == len(predictions) == 0:
+        return 1
+    hits = len(set(predictions[:k]).intersection(set(ground_truth)))
+    l = len(predictions[:k])
     if l == 0: l = 1
     return hits/l
 

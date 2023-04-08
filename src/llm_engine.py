@@ -1,5 +1,6 @@
 import torch
 from transformers import T5Tokenizer, T5ForConditionalGeneration
+from transformers import AutoTokenizer, AutoModelForCausalLM
 from transformers import GenerationConfig, LlamaTokenizer, LlamaForCausalLM
 import deepspeed
 from fairscale.nn.model_parallel.initialize import initialize_model_parallel
@@ -157,7 +158,25 @@ class AlpacaLlamaLLMAnswer(BaseLLMAnswer):
         outputs = self.model.generate(input_ids=input_ids,
                                     generation_config=self.generation_config, 
                                     max_new_tokens=self.max_new_tokens)
-        return self.tokenizer.batch_decode(outputs, skip_special_tokens=True,
+        return self.tokenizer.batch_decode(outputs[input_ids.shape[0]:], skip_special_tokens=True,
                                     clean_up_tokenization_spaces=True)
         
+class VicunaLLMAnswer(BaseLLMAnswer):
+    def __init__(self, modelname=""):
+        super().__init__()
+        self.tokenizer = AutoTokenizer.from_pretrained(modelname, use_fast=False)
+        model = AutoModelForCausalLM.from_pretrained(modelname)
+        self.model = deepspeed.init_inference(model,
+                                 dtype=torch.int8,
+                                 checkpoint=None,
+                                 replace_with_kernel_inject=True)  
+    
+    def generate_answer(self, premise_question):
+        if len(premise_question)<1: return []
+        input_ids = self.process_input(premise_question)
+        outputs = self.model.generate(input_ids=input_ids,
+                                    generation_config=self.generation_config, 
+                                    max_new_tokens=self.max_new_tokens)
+        return self.tokenizer.batch_decode(outputs[input_ids.shape[0]:], skip_special_tokens=True,
+                                    clean_up_tokenization_spaces=True)
         
