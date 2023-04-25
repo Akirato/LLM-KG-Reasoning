@@ -73,6 +73,8 @@ def main(ground_truth_path, prediction_path, log_score_path):
             with open(pred_filename) as pred_f:
                 cleaned_pred = clean_string(pred_f.read()).split(",")
                 pred = [int(x) for x in cleaned_pred if x.isdigit()]
+            gt = list(dict.fromkeys(gt))
+            pred = list(dict.fromkeys(pred))
             scores["hits@1"] += compute_hits_score(gt, pred, k=1)
             scores["hits@3"] += compute_hits_score(gt, pred, k=3)
             scores["hits@10"] += compute_hits_score(gt, pred, k=10)

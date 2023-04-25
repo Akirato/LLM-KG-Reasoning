@@ -1,5 +1,5 @@
 import os
-import sys
+import json
 from tqdm import trange
 from llm_engine import FlanLLMAnswer, LlamaLLMAnswer, FairLlamaLLMAnswer, AlpacaLlamaLLMAnswer, VicunaLLMAnswer
 from gpt_engine import GPTAnswer
@@ -7,6 +7,7 @@ from global_config import QUERY_STRUCTS
 import logging
 import argparse
 import deepspeed
+from compute_scores import clean_string
 
 logging.basicConfig(level=logging.INFO)
 def main(processed_path, batch_size=10, 
@@ -34,22 +35,22 @@ def main(processed_path, batch_size=10,
     for qtype, _ in QUERY_STRUCTS.items():
         logging.info(f"Generating predictions for query type {qtype}")
         idx  = 0
-        question_path = os.path.join(f"{processed_path}","questions",f"{qtype}_{idx}_question.txt")
+        question_path = os.path.join(f"{processed_path}","step_questions",f"{qtype}_{idx}_question.json")
         premise_questions = {}
         while os.path.exists(question_path):
             with open(question_path) as q_f:
-                question = q_f.read().strip()
+                question = json.load(q_f)
             premise_questions[idx] = question
             idx  += 1
-            question_path = os.path.join(f"{processed_path}","questions",f"{qtype}_{idx}_question.txt")
+            question_path = os.path.join(f"{processed_path}","step_questions",f"{qtype}_{idx}_question.json")
         logging.info(f"Finished loading premise questions for query type {qtype}")
         li_premise_questions = list(premise_questions.items())
-        predictions_path = os.path.join(f"{processed_path}",f"{modelname}")
+        predictions_path = os.path.join(f"{processed_path}","step_predictions",f"{modelname}")
         if not os.path.exists(predictions_path):
             os.makedirs(predictions_path)
         for i in trange(len(premise_questions)//batch_size+1):
             pq_subset = dict(li_premise_questions[i*batch_size:(i+1)*batch_size])
-            engine.log_answer(qtype, pq_subset, output_path=predictions_path)
+            engine.log_step_answer(qtype, pq_subset, output_path=predictions_path)
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
@@ -60,7 +61,7 @@ if __name__ == "__main__":
     parser.add_argument('--tokenizer_path', type=str, default="", help="Tokenizer dir for FAIR LLM")
     parser.add_argument('--lora_weights',type=str, default="", help="Path to lora weights for Alpaca LLM")
     parser.add_argument('--local_rank', type=int, default=-1, help='local rank passed from distributed launcher')
-    #parser = deepspeed.add_config_arguments(parser)
+    parser = deepspeed.add_config_arguments(parser)
     args = parser.parse_args()
 
     main(args.processed_path, args.batch_size, 

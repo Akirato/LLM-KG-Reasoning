@@ -10,6 +10,7 @@ import os
 import sys
 import time
 import json
+from compute_scores import clean_string
 
 from pathlib import Path
 class BaseLLMAnswer:
@@ -28,9 +29,9 @@ class BaseLLMAnswer:
                         return_tensors="pt").input_ids.to(self.device)
         return input_ids
 
-    def generate_answer(self, premise_question):
-        if len(premise_question)<1: return []
-        input_ids = self.process_input(premise_question)
+    def generate_answer(self, premise_questions):
+        if len(premise_questions)<1: return []
+        input_ids = self.process_input(premise_questions)
         outputs = self.model.generate(input_ids, max_new_tokens=self.max_new_tokens)
         return self.tokenizer.batch_decode(outputs, skip_special_tokens=True,
                                     clean_up_tokenization_spaces=True)
@@ -43,16 +44,71 @@ class BaseLLMAnswer:
             with open(os.path.join(f"{output_path}",f"{qtype}_{question_ids[idx]}_predicted_answer.txt"),"w") as prediction_file:
                 print(prediction, file=prediction_file)
 
+    def process_step_question(self, qtype, premise_questions):
+        if len(premise_questions)<1: return None
+        explain_tag = premise_questions[0]["question"]["explain_tag"]
+        question_tag = premise_questions[0]["question"]["question_tag"]
+        step_questions = {}
+        for premise_question in premise_questions:
+            questions = premise_question["question"]["question"][qtype]
+            premise = premise_question["premise"]
+            phase = 1
+            for question in questions:
+                enhanced_premise_question = "".join([premise,question_tag,question,explain_tag])
+                if phase in step_questions: step_questions[phase].append(enhanced_premise_question)
+                else: step_questions[phase] = [enhanced_premise_question]
+                phase += 1
+        return step_questions
+    
+    def swap_question_placeholders(self, questions, step_answers):
+        question_with_swaps = []
+        for i in range(len(questions)):
+            question = questions[i]
+            if "[PP1]" in question:
+                sai = clean_string(step_answers[1][i])
+                question = question.replace("[PP1]", "{"+sai+"}")
+            if "[PP2]" in question:
+                sai = clean_string(step_answers[2][i])
+                question = question.replace("[PP2]", "{"+sai+"}")    
+            if "[PP3]" in question:
+                sai = clean_string(step_answers[3][i])
+                question = question.replace("[PP3]", "{"+sai+"}")
+            question_with_swaps.append(question)
+        return question_with_swaps
+
+    def generate_step_answer(self, qtype, premise_questions):
+        step_questions = self.process_step_question(qtype, premise_questions)
+        if step_questions == None: return []
+        step_answers = {}
+        final_phase = 1
+        for phase in range(1,len(step_questions)+1):
+            if phase == 1:
+                step_answers[phase] = self.generate_answer(step_questions[phase])
+            else:
+                question_with_swaps = self.swap_question_placeholders(step_questions[phase], step_answers)
+                step_answers[phase] = self.generate_answer(question_with_swaps)
+            final_phase = phase
+        return step_answers[final_phase]
+
+    def log_step_answer(self, qtype, premise_questions={}, output_path=""):
+        question_ids = list(premise_questions.keys())
+        premise_questions = list(premise_questions.values())
+        predicted_answers = self.generate_step_answer(qtype, premise_questions)
+        for idx, prediction in enumerate(predicted_answers):
+            with open(os.path.join(f"{output_path}",f"{qtype}_{question_ids[idx]}_predicted_answer.txt"),"w") as prediction_file:
+                print(prediction, file=prediction_file)
+
 class FlanLLMAnswer(BaseLLMAnswer):
     def __init__(self, modelname="google/flan-t5-xxl"):
         super().__init__()
         self.tokenizer = T5Tokenizer.from_pretrained(modelname)
-        model = T5ForConditionalGeneration.from_pretrained(modelname)
-        self.model = deepspeed.init_inference(model,
-                                 mp_size=2,
-                                 dtype=torch.int8,
-                                 checkpoint=None,
-                                 replace_with_kernel_inject=True)    
+        self.model = T5ForConditionalGeneration.from_pretrained(modelname,
+                                                           load_in_8bit=True, 
+                                                           device_map="auto")
+        # self.model = deepspeed.init_inference(model,
+        #                          dtype=torch.int8,
+        #                          checkpoint=None,
+        #                          replace_with_kernel_inject=True)    
 
 class LlamaLLMAnswer(BaseLLMAnswer):
     def __init__(self, modelname="decapoda-research/llama-7b-hf"):
@@ -164,12 +220,24 @@ class AlpacaLlamaLLMAnswer(BaseLLMAnswer):
 class VicunaLLMAnswer(BaseLLMAnswer):
     def __init__(self, modelname=""):
         super().__init__()
-        self.tokenizer = AutoTokenizer.from_pretrained(modelname, use_fast=False)
-        model = AutoModelForCausalLM.from_pretrained(modelname)
-        self.model = deepspeed.init_inference(model,
-                                 dtype=torch.int8,
-                                 checkpoint=None,
-                                 replace_with_kernel_inject=True)  
+        self.tokenizer = AutoTokenizer.from_pretrained(modelname, 
+                                                       #repo_type="model", 
+                                                       use_fast=False)
+        self.tokenizer.add_special_tokens({'pad_token': '[PAD]'})
+        self.model = AutoModelForCausalLM.from_pretrained(modelname, #repo_type="model", 
+                                                     trust_remote_code=True,
+                                                     load_in_8bit=True, 
+                                                     device_map="auto")
+        self.generation_config = GenerationConfig(
+            temperature =0.2,
+            top_p = 0.95,
+            top_k = 40,
+            num_beams = 1
+        )
+        # self.model = deepspeed.init_inference(model,
+        #                          dtype=torch.int8,
+        #                          checkpoint=None,
+        #                          replace_with_kernel_inject=True)  
     
     def generate_answer(self, premise_question):
         if len(premise_question)<1: return []
@@ -179,4 +247,3 @@ class VicunaLLMAnswer(BaseLLMAnswer):
                                     max_new_tokens=self.max_new_tokens)
         return self.tokenizer.batch_decode(outputs[input_ids.shape[0]:], skip_special_tokens=True,
                                     clean_up_tokenization_spaces=True)
-        

@@ -18,7 +18,7 @@ deepspeed --include localhost:4,5,6,7 --master_port 61004 ../generate_llm_answer
              --processed_path ../../processed_data/FB15k --batch_size 14     \
              --model_name google/flan-t5-xl \
              --deepspeed --deepspeed_config ds_config.json && \
-deepspeed --include localhost:0,1,2,3,4,5,6,7 --master_port 61005 ../generate_llm_answers.py \
+deepspeed --include localhost:0,1,2,3 --master_port 61005 ../generate_llm_answers.py \
              --processed_path ../../processed_data/FB15k --batch_size 84     \
              --model_name google/flan-t5-large \
              --deepspeed --deepspeed_config ds_config.json 
