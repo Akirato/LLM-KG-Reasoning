@@ -1,5 +1,5 @@
 # Reasoning over Knowledge Graphs using Large Language Models
-![Overview of LARK model.](model.png)
+![Overview of LARK model.](./assets/model.png)
 ### Abstract
 Reasoning over knowledge graphs (KGs) is a challenging task that requires a deep
 understanding of the complex relationships between entities and the underlying
